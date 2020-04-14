@@ -15,14 +15,13 @@ if (APPLE)
 
 Earliest version we can support with Qt 5.8, C++11 & libc++ is 10.9.
 Do not override this if you intend to build an official deployable installer.")
-  set (CMAKE_OSX_SYSROOT /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk
+  set (CMAKE_OSX_SYSROOT /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
     CACHE STRING "Mac OS X SDK to build with
 
 Change this to the newest SDK available that you can install on your system (10.11 preferred).
 Do not override this if you intend to build an official deployable installer.")
-endif (APPLE)
 
-project (js8call C CXX Fortran)
+endif (APPLE)
 
 #
 # CMake policies
@@ -31,6 +30,10 @@ if (POLICY CMP0020)
   cmake_policy (SET CMP0020 NEW) # link to Qt winmain on Windows
 endif (POLICY CMP0020)
 
+if (POLICY CMP0025)
+  cmake_policy (SET CMP0025 NEW) # honour visibility properties for all library types
+endif (POLICY CMP0025)
+
 if (POLICY CMP0043)
   cmake_policy (SET CMP0043 NEW) # ignore COMPILE_DEFINITIONS_<CONFIG>
 endif (POLICY CMP0043)
@@ -38,6 +41,15 @@ endif (POLICY CMP0043)
 if (POLICY CMP0063)
   cmake_policy (SET CMP0063 NEW) # honour visibility properties for all library types
 endif (POLICY CMP0063)
+
+cmake_policy (SET CMP0056 NEW) # honour visibility properties for all library types
+cmake_policy (SET CMP0066 NEW) # honour visibility properties for all library types
+
+if (POLICY CMP0102)
+  cmake_policy (SET CMP0102 NEW)
+endif (POLICY CMP0102)
+
+project (js8call C CXX Fortran)
 
 include (${PROJECT_SOURCE_DIR}/CMake/VersionCompute.cmake)
 message (STATUS "Building ${CMAKE_PROJECT_NAME}-${wsjtx_VERSION}")
@@ -89,7 +101,7 @@ endif (BUILD_SHARED_LIBS)
 option (UPDATE_TRANSLATIONS "Update source translation translations/*.ts
 files (WARNING: make clean will delete the source .ts files! Danger!)")
 option (WSJT_SHARED_RUNTIME "Debugging option that allows running from a shared Cloud directory.")
-option (WSJT_QDEBUG_TO_FILE "Redirect Qt debuging messages to a trace file.")
+option (WSJT_QDEBUG_TO_FILE "Redirect Qt debugging messages to a trace file.")
 option (WSJT_TRACE_CAT "Debugging option that turns on CAT diagnostics.")
 option (WSJT_TRACE_CAT_POLLS "Debugging option that turns on CAT diagnostics during polling.")
 option (WSJT_HAMLIB_TRACE "Debugging option that turns on minimal Hamlib internal diagnostics.")
@@ -673,7 +685,36 @@ endif ()
 #
 # OpenMP
 #
-find_package (OpenMP)
+
+if(APPLE)
+    set(CMAKE_C_COMPILER clang)
+    set(CMAKE_CXX_COMPILER clang++)
+
+    if(CMAKE_C_COMPILER_ID MATCHES "AppleClang\$")
+        message(STATUS "CMAKE_C_COMPILER_ID: ${CMAKE_C_COMPILER_ID}")
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp")
+        set(OpenMP_C_LIB_NAMES "omp")
+        set(OpenMP_C_INCLUDE_DIR /usr/local/opt/libomp/include)
+        message(TRACE "OpenMP_C_INCLUDE_DIR: ${OpenMP_C_INCLUDE_DIR}")
+        set(OpenMP_omp_LIBRARY /usr/local/opt/libomp/lib/libomp.dylib)
+    endif()
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang\$")
+        message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp")
+        set(OpenMP_CXX_LIB_NAMES "omp")
+        set(OpenMP_CXX_INCLUDE_DIR /usr/local/opt/libomp/include)
+        message(TRACE "OpenMP_CXX_INCLUDE_DIR: ${OpenMP_CXX_INCLUDE_DIR}")
+        set(OpenMP_omp_LIBRARY /usr/local/opt/libomp/lib/libomp.dylib)
+    endif()
+endif()
+
+find_package (OpenMP REQUIRED)
+if (OpenMP_FOUND)
+  message(STATUS "OpenMP found")
+else ()
+  message(STATUS "OpenMP NOT found")
+endif ()
 
 #
 # fftw3 single precision library
@@ -698,6 +739,14 @@ message (STATUS "hamlib_LIBRARY_DIRS: ${hamlib_LIBRARY_DIRS}")
 #
 
 # Widgets finds its own dependencies.
+set(Qt5Core_DIR /usr/local/Cellar/qt/5.14.1/lib/cmake/Qt5Core)
+set(QtGui_DIR /usr/local/Cellar/qt/5.14.1/lib/cmake/Qt5Gui)
+set(Qt5Multimedia_DIR /usr/local/Cellar/qt/5.14.1/lib/cmake/Qt5Multimedia)
+set(Qt5Network_DIR /usr/local/Cellar/qt/5.14.1/lib/cmake/Qt5Network)
+set(Qt5PrintSupport_DIR /usr/local/Cellar/qt/5.14.1/lib/cmake/Qt5PrintSupport)
+set(Qt5SerialPort_DIR /usr/local/Cellar/qt/5.14.1/lib/cmake/Qt5SerialPort)
+set(Qt5Widgets_DIR /usr/local/Cellar/qt/5.14.1/lib/cmake/Qt5Widgets)
+
 find_package (Qt5Widgets 5 REQUIRED)
 find_package (Qt5Multimedia 5 REQUIRED)
 find_package (Qt5PrintSupport 5 REQUIRED)
@@ -743,7 +792,7 @@ endif (NOT APPLE)
 if (WIN32)
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 endif (WIN32)
-if (APPLE AND ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+if (APPLE AND ${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libc++")
 else ()
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
@@ -754,10 +803,13 @@ endif ()
 #
 # Fortran setup
 #
-set (General_FFLAGS "-Wall -Wno-conversion -fno-second-underscore")
+set(CMAKE_Fortran_COMPILER /usr/local/bin/gfortran)
 
+set (General_FFLAGS "-Wall -Wno-conversion -fno-second-underscore")
 # FFLAGS depend on the compiler
+
 get_filename_component (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
+message (STATUS "CMAKE_Fortran_COMPILER full path: " ${CMAKE_Fortran_COMPILER})
 
 if (Fortran_COMPILER_NAME MATCHES "gfortran.*")
   # gfortran
@@ -955,6 +1007,7 @@ if (${OPENMP_FOUND} OR APPLE)
     # On  Mac  we don't  have  working  OpenMP  support in  the  C/C++
     # compilers so  we have to manually  set the correct flags  to get
     # OpenMP support in js8.
+    message(STATUS "Testing Fortran")
     target_compile_options (wsjt_fort_omp
       PRIVATE
       $<$<COMPILE_LANGUAGE:Fortran>:-fopenmp>   # assumes GNU style Fortran compiler
@@ -1218,13 +1271,14 @@ if (NOT is_debug_build)
   list (APPEND fixup_library_dirs ${QtCore_location})
 
   if (APPLE)
+    message("wsjtx_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}/Darwin/postflight.sh.in")
     set (CMAKE_POSTFLIGHT_SCRIPT
-      "${wsjtx_BINARY_DIR}/postflight.sh")
+      "${CMAKE_CURRENT_BINARY_DIR}/postflight.sh")
     set (CMAKE_POSTUPGRADE_SCRIPT
-      "${wsjtx_BINARY_DIR}/postupgrade.sh")
-    configure_file ("${wsjtx_SOURCE_DIR}/Darwin/postflight.sh.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/postupgrade.sh")
+    configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/Darwin/postflight.sh.in"
       "${CMAKE_POSTFLIGHT_SCRIPT}")
-    configure_file ("${wsjtx_SOURCE_DIR}/Darwin/postupgrade.sh.in"
+    configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/Darwin/postupgrade.sh.in"
       "${CMAKE_POSTUPGRADE_SCRIPT}")
   endif ()
 
