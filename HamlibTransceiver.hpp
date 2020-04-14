@@ -17,7 +17,7 @@ extern "C"
 #ifdef JS8_USE_LEGACY_HAMLIB
   typedef int vfo_t;
 #else
-  typedef unsigned int vfo_t;
+  typedef int vfo_t;
 #endif
 }
 
